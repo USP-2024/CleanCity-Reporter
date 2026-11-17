@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>CleanCity 3D</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1a14; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; }
+  #stage { position: fixed; inset: 0; }
+  #stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+  #stage canvas.nv { filter: grayscale(1) sepia(1) hue-rotate(55deg) saturate(3) brightness(1.25) contrast(1.15); }
+  .hidden { display: none !important; }
+  .hud { position: fixed; inset: 0; pointer-events: none; }
+  .hud button, .joy, .panel, .chips { pointer-events: auto; }
+
+  /* ---------- top step tracker + banner ---------- */
+  .steps { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 4px; }
+  .steps span { flex: 1; text-align: center; font-size: 10.5px; font-weight: 700; padding: 6px 2px; border-radius: 10px; background: rgba(0,0,0,.45); color: #cfd8dc; line-height: 1.15; }
+  .steps span.done { background: rgba(67,160,71,.85); color: #fff; }
+  .steps span.on { background: #ffb300; color: #1b1b1b; box-shadow: 0 0 0 2px #fff inset; }
+  .banner { position: absolute; top: 54px; left: 10px; right: 10px; padding: 10px 14px; border-radius: 14px; background: rgba(15,25,20,.78); font-size: 14px; line-height: 1.35; text-align: center; }
+  .banner.pop { animation: pop .35s ease-out; }
+  @keyframes pop { from { transform: scale(.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .pill { position: absolute; background: rgba(0,0,0,.6); color: #fff; border: 1px solid rgba(255,255,255,.5); border-radius: 20px; padding: 8px 14px; font-size: 13px; font-weight: 600; }
+  #skip { right: 12px; top: 112px; }
+
+  /* ---------- progress ---------- */
+  .progress { position: absolute; left: 12px; right: 12px; bottom: 188px; background: rgba(0,0,0,.55); border-radius: 12px; padding: 8px 12px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 13px; font-weight: 600; }
+  .progress .track { grid-column: 1 / 3; height: 10px; border-radius: 6px; background: rgba(255,255,255,.25); overflow: hidden; }
+  #bar { height: 100%; width: 0; background: linear-gradient(90deg, #66bb6a, #c0ca33); transition: width .25s; }
+
+  /* ---------- joystick + buttons ---------- */
+  .joy { position: absolute; left: 22px; bottom: 30px; width: 136px; height: 136px; border-radius: 50%; background: rgba(255,255,255,.22); border: 3px solid rgba(255,255,255,.55); touch-action: none; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 58px; height: 58px; margin: -29px 0 0 -29px; border-radius: 50%; background: rgba(255,255,255,.9); box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+  .act { position: absolute; right: 24px; bottom: 34px; width: 128px; height: 128px; border-radius: 50%; border: 4px solid #fff; background: #2e7d32; color: #fff; font-size: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,.45); touch-action: none; }
+  .act small { font-size: 11px; font-weight: 800; letter-spacing: .5px; margin-top: 2px; text-align: center; line-height: 1.15; }
+  .act.held { background: #66bb6a; transform: scale(.94); }
+  .act.photo { background: #6a1b9a; animation: beat 1.2s infinite; }
+  @keyframes beat { 50% { transform: scale(1.07); } }
+
+  /* ---------- viewfinder / flash / preview ---------- */
+  .viewfinder { position: absolute; inset: 0; }
+  .viewfinder .corner { position: absolute; width: 46px; height: 46px; border: 4px solid #fff; }
+  .viewfinder .tl { top: 110px; left: 20px; border-right: 0; border-bottom: 0; } .viewfinder .tr { top: 110px; right: 20px; border-left: 0; border-bottom: 0; }
+  .viewfinder .bl { bottom: 150px; left: 20px; border-right: 0; border-top: 0; } .viewfinder .br { bottom: 150px; right: 20px; border-left: 0; border-top: 0; }
+  #btn-shutter { pointer-events: auto; position: absolute; left: 50%; bottom: 30px; margin-left: -38px; width: 76px; height: 76px; border-radius: 50%; border: 6px solid #fff; background: #e53935; box-shadow: 0 4px 14px rgba(0,0,0,.5); }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  #flash.go { animation: flash .35s ease-out; }
+  @keyframes flash { 0% { opacity: .95; } 100% { opacity: 0; } }
+  .panel { position: absolute; left: 14px; right: 14px; bottom: 16px; top: 108px; background: rgba(12,20,16,.94); border-radius: 18px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .panel img { flex: 1; min-height: 0; width: 100%; object-fit: contain; border-radius: 10px; background: #000; }
+  .panel .msg { min-height: 20px; text-align: center; font-size: 13px; color: #ffcc80; }
+  .row { display: flex; gap: 10px; }
+  .row button, .btn { flex: 1; padding: 13px; font-size: 15px; font-weight: 700; border-radius: 12px; border: 0; color: #fff; background: #455a64; pointer-events: auto; }
+  .row button.go, .btn.go { background: #2e7d32; }
+  .row button:disabled { opacity: .5; }
+
+  /* ---------- CCTV look ---------- */
+  .cctv { position: absolute; inset: 0; pointer-events: none; background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, transparent 1px 3px),
+      radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.55) 100%); }
+  html.low .cctv { background: none; } /* scanlines + vignette are costly to composite on phones */
+  #fps { position: fixed; right: 8px; bottom: 56px; font-size: 10px; opacity: .6; pointer-events: none; text-shadow: 0 1px 2px #000; z-index: 3; }
+  .cctv .rec { position: absolute; top: 12px; left: 14px; font-weight: 800; font-size: 15px; letter-spacing: 1px; text-shadow: 0 1px 3px #000; }
+  .cctv .rec i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; background: #ff1744; margin-right: 6px; animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: .15; } }
+  .cctv .clock { position: absolute; left: 14px; bottom: 14px; font-size: 13px; font-weight: 700; text-shadow: 0 1px 3px #000; }
+  .cctv .stats { position: absolute; top: 12px; right: 14px; font-size: 12px; font-weight: 700; text-align: right; text-shadow: 0 1px 3px #000; line-height: 1.5; }
+  #cctv-final .rec, #cctv-final .stats { top: 120px; }
+  #cctv-final .btns { position: absolute; left: 14px; right: 14px; bottom: 44px; display: flex; gap: 10px; }
+  #cctv-final .btns .btn { pointer-events: auto; }
+
+  /* ---------- control room ---------- */
+  #cr-top { position: absolute; top: 8px; left: 8px; right: 8px; padding: 8px 12px; border-radius: 14px; background: rgba(8,16,28,.78); font-size: 12px; }
+  #cr-top b { font-size: 14px; }
+  #cr-top .live { color: #ff5252; font-weight: 800; margin-left: 6px; animation: blink 1.4s infinite; }
+  #cr-top .counts { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  #cr-top .counts span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; background: var(--c); }
+  #cam-overlay .clock { bottom: 100px; }
+  #cr-hint { position: absolute; left: 12px; right: 12px; bottom: 66px; text-align: center; font-size: 12px; color: #cfd8dc; text-shadow: 0 1px 3px #000; }
+  #btn-nv { right: 12px; top: 92px; }
+  #cam-bar { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; gap: 6px; overflow-x: auto; padding: 4px 10px; }
+  #cam-bar button { flex: 0 0 auto; padding: 9px 13px; border-radius: 18px; border: 1px solid rgba(255,255,255,.4); background: rgba(8,16,28,.82); color: #fff; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+  #cam-bar button.on { background: #00897b; border-color: #fff; }
+  #cam-bar button.sim { border-color: #ce93d8; }
+
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 15px; background: #0e1a14; z-index: 5; }
+  #fatal { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 30px; background: #1b1b1b; z-index: 9; font-size: 15px; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="fps"></div>
+<div id="loading">Loading 3D scene…</div>
+
+<!-- ======================= WORKER SIMULATOR HUD ======================= -->
+<div id="hud-cleaner" class="hud hidden">
+  <div id="steps" class="steps">
+    <span data-step="1">1 Citizen<br>reports</span><span data-step="2">2 Admin<br>assigns</span><span data-step="3">3 You<br>clean</span><span data-step="4">4 Photo &amp;<br>upload</span><span data-step="5">5 Admin<br>reviews</span>
+  </div>
+  <div id="banner" class="banner hidden"></div>
+  <button id="skip" class="pill">Skip intro ▶</button>
+
+  <div id="progress" class="progress hidden"><span id="ptext">0 / 14 cleaned</span><span id="timer">⏱ 0:00</span><div class="track"><div id="bar"></div></div></div>
+  <div id="joy" class="joy hidden"><div id="knob"></div></div>
+  <button id="btn-clean" class="act hidden">🧹<small>HOLD TO<br>CLEAN</small></button>
+  <button id="btn-photo" class="act photo hidden">📷<small>TAKE PHOTO</small></button>
+
+  <div id="viewfinder" class="viewfinder hidden">
+    <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+    <button id="btn-shutter" aria-label="Take photo"></button>
+  </div>
+
+  <div id="preview" class="panel hidden">
+    <img id="prev-img" alt="Your photo">
+    <div id="prev-msg" class="msg"></div>
+    <div class="row"><button id="btn-retake">Retake</button><button id="btn-upload" class="go">Upload ⬆</button></div>
+  </div>
+
+  <div id="cctv-final" class="cctv hidden">
+    <div class="rec"><i></i>REC &nbsp;CAM 07 · TRAINING</div>
+    <div class="stats">PENDING REVIEW<br>ADMIN WATCHING 👁</div>
+    <div class="clock" id="cctv-clock"></div>
+    <div class="btns"><button id="btn-again" class="btn">Play again</button><button id="btn-close" class="btn go">Done</button></div>
+  </div>
+  <div id="flash"></div>
+</div>
+
+<!-- ========================= CONTROL ROOM HUD ========================= -->
+<div id="hud-control" class="hud hidden">
+  <div id="cr-top"><b>CleanCity Control Room</b><span class="live">● LIVE</span><div class="counts" id="cr-counts"></div></div>
+  <div id="cam-overlay" class="cctv hidden">
+    <div class="rec"><i></i>REC &nbsp;<span id="cam-name">CAM 01</span></div>
+    <div class="stats" id="cam-stats"></div>
+    <div class="clock" id="cam-clock"></div>
+  </div>
+  <div id="cr-hint">Drag to rotate · pinch to zoom · tap a camera or a marker</div>
+  <button id="btn-nv" class="pill">🌙 Night vision</button>
+  <div id="cam-bar" class="chips"></div>
+</div>
+
+<script src="three.min.js"></script>
+<script src="common.js"></script>
+<script src="cleaner.js"></script>
+<script src="control_room.js"></script>
+<script src="main.js"></script>
+</body>
+</html>
